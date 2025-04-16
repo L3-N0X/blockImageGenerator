@@ -12,7 +12,7 @@ wheels/
 .venv
 
 input/*
-!input/
+!input/.gitkeep
 
 output/*
-!output/
+!output/.gitkeep
