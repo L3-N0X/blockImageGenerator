@@ -153,14 +153,12 @@ def generate_palette_file(char_to_color_map, output_path):
 
 
 def image_to_block_string(image_path, color_map):
-    """Converts an image file to a Java BlockImage string (unchanged)."""
+    """Converts an image file to a Java BlockImage string (unchanged except for trailing space removal)."""
     block_lines = []
-    max_width = 0
     try:
         with Image.open(image_path) as img:
             img = img.convert("RGBA")
             width, height = img.size
-            max_width = width
             pixels = img.load()
             for y in range(height):
                 line = ""
@@ -178,8 +176,9 @@ def image_to_block_string(image_path, color_map):
                             )
                             line += "?"
                 block_lines.append(line)
-        padded_lines = [line.ljust(max_width) for line in block_lines]
-        java_string = '"""\n' + "\n".join(padded_lines) + '\n"""'
+        # Remove trailing spaces from each line
+        trimmed_lines = [line.rstrip() for line in block_lines]
+        java_string = '"""\n' + "\n".join(trimmed_lines) + '\n"""'
         return java_string
     except Exception as e:
         print(f"Error converting {image_path}: {e}")
