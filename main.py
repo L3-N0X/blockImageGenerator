@@ -266,9 +266,7 @@ def generate_java_file(
                         f.write(
                             f"        {category}Tiles(String tile) {{ this.tile = tile; }}\n"
                         )
-                        f.write(
-                            "        @Override public String toString() { return tile; }\n"
-                        )
+                        f.write("        String blockImage() { return tile; }\n")
                         f.write("    }\n\n")
             f.write("}\n")
         print(f"Generated Java block images file: {output_path}")
