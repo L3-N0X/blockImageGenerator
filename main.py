@@ -45,6 +45,13 @@ def ensure_dir(directory):
         os.makedirs(directory)
 
 
+def natural_sort_key(s):
+    """Sort helper that handles embedded numbers in strings naturally."""
+    return [
+        int(text) if text.isdigit() else text.lower() for text in re.split(r"(\d+)", s)
+    ]
+
+
 def get_image_files(directory):
     """Gets a list of image filenames from the input directory."""
     files = []
@@ -56,8 +63,8 @@ def get_image_files(directory):
             (".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tiff")
         ):
             files.append(os.path.join(directory, filename))
-    # Sort files for consistent order in generated Java file
-    files.sort()
+    # Natural sort files for consistent, human-friendly order in generated Java file
+    files.sort(key=lambda x: natural_sort_key(os.path.basename(x)))
     return files
 
 
@@ -179,7 +186,9 @@ def image_to_block_string(image_path, color_map):
         return '"""\nError\n"""'
 
 
-def generate_java_file(image_files, color_map, output_path, grouping_mode, group_output_type):
+def generate_java_file(
+    image_files, color_map, output_path, grouping_mode, group_output_type
+):
     """
     Generates the GameBlockImages.java file according to user options.
     grouping_mode: 'grouped' or 'flat'
@@ -187,55 +196,80 @@ def generate_java_file(image_files, color_map, output_path, grouping_mode, group
     """
     import collections
     import re
+
     categorized_images = collections.defaultdict(list)
     for image_path in image_files:
         filename = os.path.basename(image_path)
         name_without_ext = os.path.splitext(filename)[0]
         parts = name_without_ext.split("_", 1)
-        if grouping_mode == 'grouped' and len(parts) == 2:
+        if grouping_mode == "grouped" and len(parts) == 2:
             category_name = parts[0].capitalize()
             image_name = parts[1]
         else:
-            category_name = 'General'
+            category_name = "General"
             image_name = name_without_ext
         variable_name = re.sub(r"\W|^(?=\d)", "_", image_name).upper()
-        if not variable_name or not (variable_name[0].isalpha() or variable_name[0] == "_"):
+        if not variable_name or not (
+            variable_name[0].isalpha() or variable_name[0] == "_"
+        ):
             variable_name = "_" + variable_name
-        categorized_images[category_name].append({
-            "path": image_path,
-            "filename": filename,
-            "variable_name": variable_name
-        })
+        categorized_images[category_name].append(
+            {"path": image_path, "filename": filename, "variable_name": variable_name}
+        )
     try:
         with open(output_path, "w") as f:
             f.write("package thd.gameobjects.movable;\n\n")
             f.write("public class GameBlockImages {\n\n")
             f.write("    private GameBlockImages() {}\n\n")
             f.write("    static final double BLOCK_SIZE = 4;\n\n")
-            if grouping_mode == 'flat':
+            if grouping_mode == "flat":
                 for group in categorized_images.values():
-                    for img_info in group:
-                        block_string = image_to_block_string(img_info["path"], color_map)
-                        f.write(f"    static final String {img_info['variable_name']} = {block_string};\n\n")
+                    # Natural sort within group
+                    for img_info in sorted(
+                        group, key=lambda x: natural_sort_key(x["filename"])
+                    ):
+                        block_string = image_to_block_string(
+                            img_info["path"], color_map
+                        )
+                        f.write(
+                            f"    static final String {img_info['variable_name']} = {block_string};\n\n"
+                        )
             else:
                 for category in sorted(categorized_images.keys()):
                     group = categorized_images[category]
-                    if group_output_type == 'class':
+                    if group_output_type == "class":
                         f.write(f"    static class {category} {{\n\n")
                         f.write(f"        private {category}() {{}}\n\n")
-                        for img_info in group:
-                            block_string = image_to_block_string(img_info["path"], color_map)
-                            f.write(f"        static final String {img_info['variable_name']} = {block_string};\n\n")
+                        for img_info in sorted(
+                            group, key=lambda x: natural_sort_key(x["filename"])
+                        ):
+                            block_string = image_to_block_string(
+                                img_info["path"], color_map
+                            )
+                            f.write(
+                                f"        static final String {img_info['variable_name']} = {block_string};\n\n"
+                            )
                         f.write("    }\n\n")
-                    elif group_output_type == 'enum':
+                    elif group_output_type == "enum":
                         f.write(f"    enum {category}Tiles {{\n")
-                        for i, img_info in enumerate(group):
-                            block_string = image_to_block_string(img_info["path"], color_map)
-                            comma = "," if i < len(group) - 1 else ";"
-                            f.write(f"        {img_info['variable_name']}({block_string}){comma}\n")
+                        sorted_group = sorted(
+                            group, key=lambda x: natural_sort_key(x["filename"])
+                        )
+                        for i, img_info in enumerate(sorted_group):
+                            block_string = image_to_block_string(
+                                img_info["path"], color_map
+                            )
+                            comma = "," if i < len(sorted_group) - 1 else ";"
+                            f.write(
+                                f"        {img_info['variable_name']}({block_string}){comma}\n"
+                            )
                         f.write("        private final String tile;\n")
-                        f.write(f"        {category}Tiles(String tile) {{ this.tile = tile; }}\n")
-                        f.write("        @Override public String toString() { return tile; }\n")
+                        f.write(
+                            f"        {category}Tiles(String tile) {{ this.tile = tile; }}\n"
+                        )
+                        f.write(
+                            "        @Override public String toString() { return tile; }\n"
+                        )
                         f.write("    }\n\n")
             f.write("}\n")
         print(f"Generated Java block images file: {output_path}")
@@ -270,18 +304,20 @@ if __name__ == "__main__":
         print("2. All images as static final Strings in one class")
         while True:
             choice1 = input("Enter 1 or 2: ").strip()
-            if choice1 in ("1", "2"): break
+            if choice1 in ("1", "2"):
+                break
         if choice1 == "1":
             print("\nHow should each group be represented?")
             print("1. As static inner classes (each image as static final String)")
             print("2. As enums (each image as an enum constant with the image string)")
             while True:
                 choice2 = input("Enter 1 or 2: ").strip()
-                if choice2 in ("1", "2"): break
-            group_output_type = 'class' if choice2 == "1" else 'enum'
-            grouping_mode = 'grouped'
+                if choice2 in ("1", "2"):
+                    break
+            group_output_type = "class" if choice2 == "1" else "enum"
+            grouping_mode = "grouped"
         else:
-            grouping_mode = 'flat'
+            grouping_mode = "flat"
             group_output_type = None
 
         java_path = os.path.join(OUTPUT_DIR, "GameBlockImages.java")
